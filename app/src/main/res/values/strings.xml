@@ -1,4 +1,11 @@
 <resources>
     <string name="app_name">Geofencing</string>
     <string name="title_activity_maps">Map</string>
+
+    <string name="inside">Inside</string>
+    <string name="outside">Outside</string>
+
+    <string name="title_enter_wifi_ssid">Geofencing Wi-Fi SSID</string>
+    <string name="button_text_tutorial">Tutorial</string>
+
 </resources>
