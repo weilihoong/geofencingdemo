@@ -9,12 +9,17 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.PendingIntent;
+import android.companion.WifiDeviceFilter;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -26,6 +31,7 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofencingClient;
 import com.google.android.gms.location.GeofencingEvent;
@@ -56,11 +62,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private float GEOFENCE_RADIUS = 50;
     private String GEOFENCE_ID = "MAIN_GEOFENCE_ID";
 
-    private boolean isInsideGeofence = false;
+    private boolean isInsideGeofenceLocation = false;
 
     EditText editTextSsid;
 
-    private BroadcastReceiver receiver = new BroadcastReceiver()
+    String connectedSSID="";
+
+    String userEnteredSSID="";
+
+    private BroadcastReceiver geofenceBroadcastReceiver = new BroadcastReceiver()
     {
         @Override
         public void onReceive(Context context, Intent intent)
@@ -72,11 +82,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             switch (transitionType) {
                 case Geofence.GEOFENCE_TRANSITION_ENTER:
                 case Geofence.GEOFENCE_TRANSITION_DWELL:
-                    isInsideGeofence = true;
+                    isInsideGeofenceLocation = true;
                     setGeofenceStatus();
                     break;
                 case Geofence.GEOFENCE_TRANSITION_EXIT:
-                    isInsideGeofence = false;
+                    isInsideGeofenceLocation = false;
                     setGeofenceStatus();
                     break;
             }
@@ -85,8 +95,46 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     };
 
+
+
+    private BroadcastReceiver wifiBroadcastReceiver = new BroadcastReceiver()
+    {
+        @Override
+        public void onReceive(Context context, Intent intent)
+        {
+                NetworkInfo netInfo = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
+                if (ConnectivityManager.TYPE_WIFI == netInfo.getType())
+                {
+                    if(netInfo.isConnected ())
+                    {
+                        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService (Context.WIFI_SERVICE);
+                        WifiInfo info = wifiManager.getConnectionInfo ();
+                        connectedSSID  = info.getSSID().substring(1,info.getSSID().length()-1);
+                    }
+                    else
+                    {
+//                        remove ssid
+                    }
+                }
+
+            setGeofenceStatus();
+
+
+        }
+    };
+
     private void setGeofenceStatus(){
         TextView textViewStatus = (TextView) findViewById(R.id.text_view_status);
+
+        boolean isInsideGeofence = false;
+        if(!userEnteredSSID.isEmpty() && userEnteredSSID.equals(connectedSSID))
+        {
+            isInsideGeofence = true;
+        }else
+        {
+            isInsideGeofence = isInsideGeofenceLocation;
+        }
+
         if(isInsideGeofence){
             textViewStatus.setText("INSIDE LIAO");
         }else{
@@ -124,20 +172,23 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
         });
 
-        registerReceiver(receiver, new IntentFilter("GEOFENCE_ACTION"));
+        registerReceiver(geofenceBroadcastReceiver, new IntentFilter("GEOFENCE_ACTION"));
+        IntentFilter wifiIntentFilter = new IntentFilter();
+        wifiIntentFilter.addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION);
+        registerReceiver(wifiBroadcastReceiver, wifiIntentFilter);
     }
 
     @Override
     protected void onDestroy()
     {
-        unregisterReceiver(receiver);
+        unregisterReceiver(geofenceBroadcastReceiver);
+        unregisterReceiver(wifiBroadcastReceiver);
         super.onDestroy();
     }
 
     private void onEnterWifiSsid(){
-        //TODO: get wifi ssid and determine inside outside
+        userEnteredSSID = editTextSsid.getText().toString();
         setGeofenceStatus();
-        System.out.println("on enter wifi ssid");
     }
 
     private boolean getIsConnectedToGeofenceWifi()
@@ -158,17 +209,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
     }
 
-    private void enableUserLocation() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+    private void enableUserLocation(){
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED){
+            mMap.setMyLocationEnabled(false);
             mMap.setMyLocationEnabled(true);
-        } else {
+
+        }else{
             //Ask for permission
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
-                //We need to show user a dialog for displaying why the permission is needed and then ask for the permission...
-                ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.ACCESS_FINE_LOCATION}, FINE_LOCATION_ACCESS_REQUEST_CODE);
-            } else {
-                ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.ACCESS_FINE_LOCATION}, FINE_LOCATION_ACCESS_REQUEST_CODE);
-            }
+            ActivityCompat.requestPermissions(this, new String[]{ Manifest.permission.ACCESS_FINE_LOCATION }, BACKGROUND_LOCATION_ACCESS_REQUEST_CODE);
+
         }
     }
 
@@ -196,12 +245,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 setGeofencingArea(latLng);
             } else {
                 ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.ACCESS_BACKGROUND_LOCATION}, BACKGROUND_LOCATION_ACCESS_REQUEST_CODE);
-//                if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
-//                    //We show a dialog and ask for permission
-//                    ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.ACCESS_BACKGROUND_LOCATION}, BACKGROUND_LOCATION_ACCESS_REQUEST_CODE);
-//                } else {
-//                    ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.ACCESS_BACKGROUND_LOCATION}, BACKGROUND_LOCATION_ACCESS_REQUEST_CODE);
-//                }
             }
 
         } else {
@@ -229,6 +272,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         if (requestCode == BACKGROUND_LOCATION_ACCESS_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                enableUserLocation();
                 Toast.makeText(this, "You can now add geofences...", Toast.LENGTH_SHORT).show();
             } else {
                 Toast.makeText(this, "Permission required to add geofences.", Toast.LENGTH_SHORT).show();
