@@ -203,14 +203,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             if (Build.VERSION.SDK_INT >= 29) {
                 if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED){
-                    mMap.setMyLocationEnabled(false);
                     mMap.setMyLocationEnabled(true);
                 }else{
                     ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION}, BACKGROUND_LOCATION_ACCESS_REQUEST_CODE);
                 }
 
             }else{
-                mMap.setMyLocationEnabled(false);
                 mMap.setMyLocationEnabled(true);
             }
 
