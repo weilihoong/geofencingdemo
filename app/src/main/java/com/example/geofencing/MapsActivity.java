@@ -1,9 +1,13 @@
 package com.example.geofencing;
 
+import androidx.activity.ComponentActivity;
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.lifecycle.ViewModelStoreOwner;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -47,34 +51,29 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 
+import org.w3c.dom.Text;
+
 import java.util.List;
 
-public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
-{
+public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
+    MapsViewModel viewModel;
 
     private GoogleMap mMap;
     private GeofencingClient geofencingClient;
     private GeofenceHelper geofenceHelper;
 
-    private int FINE_LOCATION_ACCESS_REQUEST_CODE = 10001;
-    private int BACKGROUND_LOCATION_ACCESS_REQUEST_CODE = 10002;
+    private final int FINE_LOCATION_ACCESS_REQUEST_CODE = 10001;
+    private final int BACKGROUND_LOCATION_ACCESS_REQUEST_CODE = 10002;
 
-    private float GEOFENCE_RADIUS = 50;
-    private String GEOFENCE_ID = "MAIN_GEOFENCE_ID";
-
-    private boolean isInsideGeofenceLocation = false;
+    private final float GEOFENCE_RADIUS = 50;
+    private final String GEOFENCE_ID = "MAIN_GEOFENCE_ID";
 
     EditText editTextSsid;
+    TextView textViewStatus;
 
-    String connectedSSID="";
-
-    String userEnteredSSID="";
-
-    private BroadcastReceiver geofenceBroadcastReceiver = new BroadcastReceiver()
-    {
+    private BroadcastReceiver geofenceBroadcastReceiver = new BroadcastReceiver() {
         @Override
-        public void onReceive(Context context, Intent intent)
-        {
+        public void onReceive(Context context, Intent intent) {
 
             GeofencingEvent geofencingEvent = GeofencingEvent.fromIntent(intent);
             int transitionType = geofencingEvent.getGeofenceTransition();
@@ -82,12 +81,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             switch (transitionType) {
                 case Geofence.GEOFENCE_TRANSITION_ENTER:
                 case Geofence.GEOFENCE_TRANSITION_DWELL:
-                    isInsideGeofenceLocation = true;
-                    setGeofenceStatus();
+                    viewModel.setIsInsideGeofenceLocation(true);
                     break;
                 case Geofence.GEOFENCE_TRANSITION_EXIT:
-                    isInsideGeofenceLocation = false;
-                    setGeofenceStatus();
+                    viewModel.setIsInsideGeofenceLocation(false);
                     break;
             }
 
@@ -95,58 +92,26 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     };
 
-
-
-    private BroadcastReceiver wifiBroadcastReceiver = new BroadcastReceiver()
-    {
+    private BroadcastReceiver wifiBroadcastReceiver = new BroadcastReceiver() {
         @Override
-        public void onReceive(Context context, Intent intent)
-        {
-                NetworkInfo netInfo = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
-                if (ConnectivityManager.TYPE_WIFI == netInfo.getType())
-                {
-                    if(netInfo.isConnected ())
-                    {
-                        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService (Context.WIFI_SERVICE);
-                        WifiInfo info = wifiManager.getConnectionInfo ();
-                        connectedSSID  = info.getSSID().substring(1,info.getSSID().length()-1);
-                    }
-                    else
-                    {
-//                        remove ssid
-                    }
+        public void onReceive(Context context, Intent intent) {
+            NetworkInfo netInfo = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
+            if (ConnectivityManager.TYPE_WIFI == netInfo.getType()) {
+                if (netInfo.isConnected()) {
+                    WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                    WifiInfo info = wifiManager.getConnectionInfo();
+                    String connectedSSID = info.getSSID().substring(1, info.getSSID().length() - 1);
+                    viewModel.setConnectedSSID(connectedSSID);
+                } else {
+                    viewModel.setConnectedSSID(null);
                 }
-
-            setGeofenceStatus();
-
-
+            }
         }
     };
 
-    private void setGeofenceStatus(){
-        TextView textViewStatus = (TextView) findViewById(R.id.text_view_status);
-
-        boolean isInsideGeofence = false;
-        if(!userEnteredSSID.isEmpty() && userEnteredSSID.equals(connectedSSID))
-        {
-            isInsideGeofence = true;
-        }else
-        {
-            isInsideGeofence = isInsideGeofenceLocation;
-        }
-
-        if(isInsideGeofence){
-            textViewStatus.setText("INSIDE LIAO");
-        }else{
-            textViewStatus.setText("Outside LIAO");
-        }
-    }
-
-
 
     @Override
-    protected void onCreate(Bundle savedInstanceState)
-    {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
@@ -156,6 +121,31 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         geofencingClient = LocationServices.getGeofencingClient(this);
         geofenceHelper = new GeofenceHelper(this);
+
+        ViewModelProvider.Factory factory = new MapsViewModelFactory();
+        viewModel = new ViewModelProvider(this, factory).get(MapsViewModel.class);
+
+        initUI();
+
+        registerReceiver(geofenceBroadcastReceiver, new IntentFilter("GEOFENCE_ACTION"));
+        IntentFilter wifiIntentFilter = new IntentFilter();
+        wifiIntentFilter.addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION);
+        registerReceiver(wifiBroadcastReceiver, wifiIntentFilter);
+    }
+
+    private void initUI(){
+        textViewStatus = (TextView) findViewById(R.id.text_view_status);
+        viewModel.getIsInsideGeofence().observe(this, isInsideGeofence -> {
+            if (isInsideGeofence) {
+                textViewStatus.setText(R.string.inside);
+                textViewStatus.setTextColor(getResources().getColor(R.color.green));
+            } else {
+                textViewStatus.setText(R.string.outside);
+                textViewStatus.setTextColor(getResources().getColor(R.color.red));
+            }
+
+
+        });
 
         editTextSsid = (EditText) findViewById(R.id.edit_text_ssid);
         editTextSsid.setOnEditorActionListener(new TextView.OnEditorActionListener() {
@@ -171,65 +161,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 return handled;
             }
         });
-
-        registerReceiver(geofenceBroadcastReceiver, new IntentFilter("GEOFENCE_ACTION"));
-        IntentFilter wifiIntentFilter = new IntentFilter();
-        wifiIntentFilter.addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION);
-        registerReceiver(wifiBroadcastReceiver, wifiIntentFilter);
     }
 
     @Override
-    protected void onDestroy()
-    {
-        unregisterReceiver(geofenceBroadcastReceiver);
-        unregisterReceiver(wifiBroadcastReceiver);
-        super.onDestroy();
-    }
-
-    private void onEnterWifiSsid(){
-        userEnteredSSID = editTextSsid.getText().toString();
-        setGeofenceStatus();
-    }
-
-    private boolean getIsConnectedToGeofenceWifi()
-    {
-        //TODO: to determine if geofence wifi is connected
-        //editTextSsid.getText() == CONNECTED_WIFI_SSID
-        return false;
-    }
-
-    public void hideKeyboard() {
-        InputMethodManager imm = (InputMethodManager) getSystemService(Activity.INPUT_METHOD_SERVICE);
-        //Find the currently focused view, so we can grab the correct window token from it.
-        View view = getCurrentFocus();
-        //If no view currently has focus, create a new one, just so we can grab a window token from it
-        if (view == null) {
-            view = new View(this);
-        }
-        imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
-    }
-
-    private void enableUserLocation(){
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED){
-            mMap.setMyLocationEnabled(false);
-            mMap.setMyLocationEnabled(true);
-
-        }else{
-            //Ask for permission
-            ActivityCompat.requestPermissions(this, new String[]{ Manifest.permission.ACCESS_FINE_LOCATION }, BACKGROUND_LOCATION_ACCESS_REQUEST_CODE);
-
-        }
-    }
-
-    @Override
-    public void onMapReady(GoogleMap googleMap)
-    {
+    public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
 
         // Add a marker in Kuala Lumpur and move the camera
         LatLng kualaLumpur = new LatLng(3.1390, 101.6869);
         mMap.addMarker(new MarkerOptions().position(kualaLumpur).title("Marker in Kuala Lumpur"));
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(kualaLumpur,16));
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(kualaLumpur, 16));
 
         enableUserLocation();
 
@@ -238,13 +179,45 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         });
     }
 
-    private void handleMapLongClick(LatLng latLng){
+    @Override
+    protected void onDestroy() {
+        unregisterReceiver(geofenceBroadcastReceiver);
+        unregisterReceiver(wifiBroadcastReceiver);
+        super.onDestroy();
+    }
+
+    private void onEnterWifiSsid() {
+        viewModel.setUserEnteredSSID(editTextSsid.getText().toString());
+    }
+
+    private void hideKeyboard() {
+        InputMethodManager imm = (InputMethodManager) getSystemService(Activity.INPUT_METHOD_SERVICE);
+        View view = getCurrentFocus();
+        if (view == null) {
+            view = new View(this);
+        }
+        imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+    }
+
+    private void enableUserLocation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            mMap.setMyLocationEnabled(false);
+            mMap.setMyLocationEnabled(true);
+
+        } else {
+            //Ask for permission
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, BACKGROUND_LOCATION_ACCESS_REQUEST_CODE);
+        }
+    }
+
+
+    private void handleMapLongClick(LatLng latLng) {
         if (Build.VERSION.SDK_INT >= 29) {
             //We need background permission to add geofence for
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                 setGeofencingArea(latLng);
             } else {
-                ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.ACCESS_BACKGROUND_LOCATION}, BACKGROUND_LOCATION_ACCESS_REQUEST_CODE);
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION}, BACKGROUND_LOCATION_ACCESS_REQUEST_CODE);
             }
 
         } else {
@@ -264,9 +237,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         if (requestCode == FINE_LOCATION_ACCESS_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 enableUserLocation();
-            } else {
-                //TODO: show alert
-
             }
         }
 
@@ -311,8 +281,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         CircleOptions circleOptions = new CircleOptions();
         circleOptions.center(latLng);
         circleOptions.radius(radius);
-        circleOptions.strokeColor(Color.argb(255, 255, 0,0));
-        circleOptions.fillColor(Color.argb(64, 255, 0,0));
+        circleOptions.strokeColor(Color.argb(255, 255, 0, 0));
+        circleOptions.fillColor(Color.argb(64, 255, 0, 0));
         circleOptions.strokeWidth(4);
         mMap.addCircle(circleOptions);
     }

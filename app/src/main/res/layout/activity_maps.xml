@@ -23,18 +23,6 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <Button
-                android:id="@+id/button_tutorial"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/button_text_tutorial"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="10dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/text_view_status"
-                app:layout_constraintBottom_toBottomOf="parent"/>
-
             <TextView
                 android:id="@+id/text_view_status"
                 style="@style/subheader_text"
@@ -43,12 +31,14 @@
                 android:layout_marginStart="20dp"
                 android:layout_marginTop="5dp"
                 android:layout_marginEnd="20dp"
+                android:layout_marginBottom="20dp"
                 android:text="@string/outside"
                 android:textColor="@color/red"
 
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/input_layout_ssid" />
+                app:layout_constraintTop_toBottomOf="@+id/input_layout_ssid"
+                card_view:layout_constraintBottom_toBottomOf="parent"/>
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/input_layout_ssid"
